@@ -1,0 +1,70 @@
+{
+  "summary": {
+    "passed": 5,
+    "total": 5,
+    "avg_latency": 31.640000000000004,
+    "avg_score": 0.8400000000000001
+  },
+  "tests": [
+    {
+      "test": 1,
+      "message": "Python дедлайн завтра, история через нед",
+      "expected_route": "planner",
+      "actual_route": "planner",
+      "route_ok": true,
+      "keywords_hit": "67%",
+      "quality_score": 0.8,
+      "latency_sec": 49.5,
+      "latency_ok": true,
+      "status": "PASS"
+    },
+    {
+      "test": 2,
+      "message": "Объясни что такое JOIN в SQL простыми сл",
+      "expected_route": "tutor",
+      "actual_route": "tutor",
+      "route_ok": true,
+      "keywords_hit": "100%",
+      "quality_score": 0.8,
+      "latency_sec": 27.7,
+      "latency_ok": true,
+      "status": "PASS"
+    },
+    {
+      "test": 3,
+      "message": "Застрял на алгоритмах, дай микрозадачу н",
+      "expected_route": "planner",
+      "actual_route": "planner",
+      "route_ok": true,
+      "keywords_hit": "50%",
+      "quality_score": 0.8,
+      "latency_sec": 30.2,
+      "latency_ok": true,
+      "status": "PASS"
+    },
+    {
+      "test": 4,
+      "message": "Python завтра и объясни мне что такое сп",
+      "expected_route": "both",
+      "actual_route": "both",
+      "route_ok": true,
+      "keywords_hit": "50%",
+      "quality_score": 0.8,
+      "latency_sec": 37.2,
+      "latency_ok": true,
+      "status": "PASS"
+    },
+    {
+      "test": 5,
+      "message": "Что такое нейронная сеть",
+      "expected_route": "tutor",
+      "actual_route": "tutor",
+      "route_ok": true,
+      "keywords_hit": "50%",
+      "quality_score": 1.0,
+      "latency_sec": 13.6,
+      "latency_ok": true,
+      "status": "PASS"
+    }
+  ]
+}
