@@ -1,0 +1,74 @@
+services:
+  ollama:
+    image: ollama/ollama
+    ports: ["11434:11434"]
+    volumes: ['ollama_models:/root/.ollama']
+
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    ports: ["8001:8000"]
+    volumes: ['./chroma:/chroma/chroma']
+
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes: ['./pgdata:/var/lib/postgresql/data']
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  langfuse:
+    image: ghcr.io/langfuse/langfuse:2
+    ports: ["3000:3000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@postgres:5432/langfuse
+      NEXTAUTH_SECRET: studyflow_secret_key_123
+      NEXTAUTH_URL: http://localhost:3000
+      SALT: studyflow_salt
+
+  backend:
+    build: ../backend
+    ports: ["8000:8000"]
+    depends_on: [ollama, chromadb, langfuse]
+    volumes: ['../backend:/app']
+    env_file: .env
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      LANGFUSE_HOST: http://langfuse:3000
+      KIMI_API_KEY: ${KIMI_API_KEY}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+
+  streamlit:
+    build: ../ui
+    ports: ["8501:8501"]
+    depends_on: [backend]
+    environment:
+      BACKEND_URL: http://backend:8000
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports: ["9090:9090"]
+    volumes: ['./prometheus.yml:/etc/prometheus/prometheus.yml']
+    command: ['--config.file=/etc/prometheus/prometheus.yml']
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports: ["3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: studyflow
+    volumes: ['grafana_data:/var/lib/grafana']
+
+volumes:
+  ollama_models:
+  grafana_data:

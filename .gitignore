@@ -209,3 +209,35 @@ __marimo__/
 .DS_Store
 **/.DS_Store
 
+# Инфраструктурные данные (Chroma, PostgreSQL, SSH-ключи)
+studyflow/infra/chroma/
+studyflow/infra/pgdata/
+studyflow/infra/models/id_ed25519*
+
+# Результаты оценок (обычно не хранят в репозитории)
+studyflow/evals/results.json
+
+# Служебные файлы Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Виртуальные окружения
+venv/
+env/
+ENV/
+.venv
+
+# Файлы IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Логи и базы данных
+*.log
+*.sql
+*.sqlite3
