@@ -101,35 +101,140 @@ async def chat(req: ChatRequest):
 
     lf = get_langfuse()
     trace = None
+    supervisor_gen = None
+    planner_gen = None
+    tutor_gen = None
+    
     if lf:
         try:
-            trace = lf.trace(name="studyflow-chat", session_id=req.session_id, input=req.message)
-        except Exception:
-            pass
+            # Создаём основной trace
+            trace = lf.trace(
+                name="studyflow-chat", 
+                session_id=req.session_id, 
+                input=req.message,
+                metadata={"user_id": req.session_id}
+            )
+            
+            # Создаём generation для Supervisor (он всегда вызывается)
+            supervisor_gen = trace.generation(
+                name="supervisor",
+                model="qwen2.5:7b",
+                input=req.message,
+                metadata={"type": "router"}
+            )
+            logger.info("Langfuse: created supervisor generation")
+        except Exception as e:
+            logger.warning(f"Langfuse trace/generation creation failed: {e}")
 
     try:
+        # Засекаем время выполнения
+        import time
+        start_time = time.time()
+        
         result = graph.invoke(initial_state)
+        
+        elapsed_time = time.time() - start_time
+        
     except Exception as e:
         logger.error(f"Graph invoke error: {e}", exc_info=True)
+        # В случае ошибки, отмечаем generation как ошибку
+        if supervisor_gen:
+            supervisor_gen.update(
+                output={"error": str(e)},
+                level="ERROR"
+            )
+        if trace:
+            trace.update(output={"error": str(e)})
+        if lf:
+            lf.flush()
         raise HTTPException(status_code=500, detail=str(e))
 
     answer = result.get("final_answer") or "Не удалось получить ответ"
-    score  = float(result.get("quality_score") or 0.0)
-    route  = result.get("route") or "unknown"
+    score = float(result.get("quality_score") or 0.0)
+    route = result.get("route") or "unknown"
+    planner_out = result.get("planner_out")
+    tutor_out = result.get("tutor_out")
+
+    # Обновляем generation для Supervisor (результат маршрутизации)
+    if supervisor_gen:
+        supervisor_gen.update(
+            output={"route": route},
+            metadata={"routing_time_ms": elapsed_time * 1000}
+        )
+        supervisor_gen.end()
+        logger.info(f"Langfuse: updated supervisor generation, route={route}")
+
+    # Создаём отдельные generation для Planner и Tutor, если они были вызваны
+    if planner_out and route in ("planner", "both"):
+        if trace:
+            planner_gen = trace.generation(
+                name="planner",
+                model="qwen2.5:3b",
+                input=req.message,
+                output=planner_out[:1000],  # ограничиваем длину
+                metadata={"type": "planner", "route": route}
+            )
+            planner_gen.end()
+            logger.info("Langfuse: created planner generation")
+
+    if tutor_out and route in ("tutor", "both"):
+        if trace:
+            tutor_gen = trace.generation(
+                name="tutor",
+                model="kimi-k2.5:cloud",
+                input=req.message,
+                output=tutor_out[:1000],
+                metadata={"type": "tutor", "route": route}
+            )
+            tutor_gen.end()
+            logger.info("Langfuse: created tutor generation")
+
+    # Добавляем Score для оценки качества ответа
+    if trace:
+        try:
+            # Добавляем score как отдельную сущность (видна во вкладке Scores)
+            trace.score(
+                name="quality_score",
+                value=score,
+                comment=f"Evaluator agent score for route={route}"
+            )
+            
+            # Также добавляем метрики времени выполнения
+            trace.score(
+                name="latency_seconds",
+                value=elapsed_time,
+                comment=f"Total response time: {elapsed_time:.2f}s"
+            )
+            
+            # Обновляем trace с финальным ответом
+            trace.update(
+                output=answer,
+                metadata={
+                    "quality_score": score, 
+                    "route": route,
+                    "latency_seconds": elapsed_time,
+                    "planner_used": bool(planner_out and route in ("planner", "both")),
+                    "tutor_used": bool(tutor_out and route in ("tutor", "both"))
+                }
+            )
+            logger.info(f"Langfuse: added scores (quality={score}, latency={elapsed_time:.2f}s)")
+        except Exception as e:
+            logger.warning(f"Langfuse trace update failed: {e}")
 
     # Сохраняем в буфер и долгосрочную память
     add_to_buffer(req.session_id, "user", req.message)
     add_to_buffer(req.session_id, "assistant", answer[:200])
     save_to_memory(req.session_id, f"Q: {req.message}\nA: {answer}", doc_type="dialog")
 
-    if trace:
+    # Принудительная отправка всех данных в Langfuse
+    if lf:
         try:
-            trace.update(output=answer, metadata={"quality_score": score, "route": route})
             lf.flush()
-        except Exception:
-            pass
+            logger.debug("Langfuse: flushed data")
+        except Exception as e:
+            logger.warning(f"Langfuse flush failed: {e}")
 
-    logger.info(f"Chat OK | route={route} score={score:.2f} session={req.session_id}")
+    logger.info(f"Chat OK | route={route} score={score:.2f} session={req.session_id} latency={elapsed_time:.2f}s")
     return ChatResponse(answer=answer, quality_score=score, route=route)
 
 

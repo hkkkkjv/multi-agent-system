@@ -46,8 +46,8 @@ def format_history(session_id: str) -> str:
 def _get_chroma_client():
     try:
         import chromadb
-        host = os.getenv("CHROMA_HOST", "localhost")
-        port = int(os.getenv("CHROMA_PORT", "8001"))
+        host = os.getenv("CHROMA_HOST", "chromadb")
+        port = int(os.getenv("CHROMA_PORT", "8000"))
         return chromadb.HttpClient(host=host, port=port)
     except Exception as e:
         logger.warning(f"ChromaDB unavailable: {e}")

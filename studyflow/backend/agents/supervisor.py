@@ -1,8 +1,9 @@
 """
-Supervisor Agent — qwen2.5:1.5b
-Маршрутизирует запрос к нужным агентам.
+Supervisor Agent — маршрутизирует запрос к нужным агентам.
+Загружает AGENT_CONTEXT.md для понимания системы.
 """
 import logging
+from pathlib import Path
 from langchain_ollama import OllamaLLM
 from langchain.prompts import PromptTemplate
 from config import LLM_CONFIG, AgentState
@@ -12,23 +13,50 @@ logger = logging.getLogger(__name__)
 _llm = OllamaLLM(
     model=LLM_CONFIG["supervisor"]["model"],
     base_url=LLM_CONFIG["supervisor"]["base_url"],
-    temperature=0.0,  # детерминированная маршрутизация
+    temperature=0.0,
 )
 
-_PROMPT = PromptTemplate.from_template("""Classify the user's request. Reply with ONE word only.
 
-User request: {user_input}
+def _load_routing_context() -> str:
+    """Загружает описание агентов из AGENT_CONTEXT.md для точной маршрутизации."""
+    md_path = Path(__file__).parent.parent.parent / "prompts" / "AGENT_CONTEXT.md"
+    try:
+        content = md_path.read_text(encoding="utf-8")
+        # Берём только секцию про агентов — она описывает кто что умеет
+        start = content.find("## Агенты системы")
+        end   = content.find("## Формат взаимодействия")
+        if start != -1 and end != -1:
+            return content[start:end].strip()
+        return content
+    except Exception:
+        return ""
 
-Rules:
-- "planner" — schedule, plan, deadline, timetable, microtask, missed class
-- "tutor" — explain, what is, how does, analogy, concept, summary
-- "both" — needs planning AND explanation
 
-Reply only: planner / tutor / both""")
+_routing_context = _load_routing_context()
 
-# Ключевые слова для надёжного fallback без LLM
-_PLANNER_KEYWORDS = ["план", "дедлайн", "расписание", "завтра", "неделя", "время", "пропустил", "микрозадач"]
-_TUTOR_KEYWORDS   = ["объясни", "что такое", "как работает", "аналог", "конспект", "расскажи", "помоги понять"]
+_PROMPT = PromptTemplate.from_template("""Ты — оркестратор системы StudyFlow. Классифицируй запрос пользователя.
+
+{routing_context}
+
+Запрос: {user_input}
+
+Правила маршрутизации:
+- "planner" — расписание, план, дедлайн, микрозадача, пропустил занятие
+- "tutor"   — объяснение темы, что такое, как работает, аналогия, конспект
+- "both"    — нужно и то, и другое
+
+Ответь ОДНИМ словом: planner / tutor / both""")
+
+_PLANNER_KEYWORDS = [
+    "план", "дедлайн", "расписание", "завтра", "неделя",
+    "пропустил", "микрозадач", "сколько времени", "когда учить",
+    "застрял", "устал",
+]
+_TUTOR_KEYWORDS = [
+    "объясни", "что такое", "как работает", "аналог", "конспект",
+    "расскажи", "помоги понять", "как меня", "зовут", "помни",
+    "что я", "кто я", "напомни", "что значит", "почему",
+]
 
 
 def _keyword_route(text: str) -> str | None:
@@ -46,20 +74,20 @@ def _keyword_route(text: str) -> str | None:
 
 def supervisor_node(state: AgentState) -> AgentState:
     user_input = state["user_input"]
-
-    # Сначала пробуем keyword matching — быстро и надёжно
     route = _keyword_route(user_input)
 
     if route is None:
-        # Если keywords не сработали — спрашиваем LLM
         try:
-            raw = _llm.invoke(_PROMPT.format(user_input=user_input)).strip().lower()
-            if "plan" in raw:
+            raw = _llm.invoke(_PROMPT.format(
+                routing_context=_routing_context,
+                user_input=user_input,
+            )).strip().lower()
+            if "planner" in raw:
                 route = "planner"
-            elif "tutor" in raw or "both" not in raw:
-                route = "tutor"
-            else:
+            elif "both" in raw:
                 route = "both"
+            else:
+                route = "tutor"
         except Exception as e:
             logger.warning(f"Supervisor LLM error: {e}, defaulting to both")
             route = "both"
