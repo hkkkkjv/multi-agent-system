@@ -16,7 +16,9 @@ with st.sidebar:
     session_id = st.text_input("Session ID", value="user1")
 
     st.divider()
-    st.subheader("Загрузить материалы")
+    st.subheader("📎 Загрузить материалы в память")
+    st.caption("Загруженные файлы сохраняются в ChromaDB и используются при следующих вопросах через RAG-поиск. Например: загрузи конспект по Python → спроси 'что в моих материалах про функции?'")
+
     uploaded = st.file_uploader("PDF или TXT", type=["pdf", "txt"])
     if uploaded and st.button("Загрузить в память"):
         with st.spinner("Загружаю..."):
@@ -29,12 +31,12 @@ with st.sidebar:
                 )
                 data = resp.json()
                 st.success(f"Загружено {data.get('chunks_saved', 0)} чанков из {uploaded.name}")
+                st.info("Теперь можешь спросить: 'что в моих материалах про ...'")
             except Exception as e:
                 st.error(f"Ошибка: {e}")
 
     st.divider()
-    # Статус системы
-    if st.button("Проверить статус"):
+    if st.button("🔍 Проверить статус"):
         try:
             h = httpx.get(f"{BACKEND}/health", timeout=5).json()
             for k, v in h.items():
@@ -43,17 +45,22 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Backend недоступен: {e}")
 
-# ── Примеры запросов ─────────────────────────────────────────
+# ── Быстрые примеры — вставляют в поле ввода, не отправляют ──
 st.subheader("Быстрые примеры")
-cols = st.columns(3)
-examples = [
-    "Python дедлайн завтра, история через неделю",
-    "Объясни что такое JOIN в SQL",
-    "Застрял на алгоритмах, дай микрозадачу",
+st.caption("Нажми чтобы вставить шаблон в поле ввода")
+
+EXAMPLES = [
+    ("📅 План дня",        "Python дедлайн завтра, история через неделю"),
+    ("📖 Объяснение",      "Объясни что такое JOIN в SQL простыми словами"),
+    ("⚡ Микрозадача",     "Застрял на алгоритмах, дай микрозадачу на 10 минут"),
+    ("🔗 Из материалов",   "Что в моих материалах про функции Python?"),
+    ("📝 Оба агента",      "Python завтра и объясни что такое список"),
 ]
-for col, ex in zip(cols, examples):
-    if col.button(ex[:30] + "...", use_container_width=True):
-        st.session_state["prefill"] = ex
+
+cols = st.columns(len(EXAMPLES))
+for col, (label, text) in zip(cols, EXAMPLES):
+    if col.button(label, use_container_width=True):
+        st.session_state["prefill"] = text
 
 # ── Чат ──────────────────────────────────────────────────────
 if "messages" not in st.session_state:
@@ -63,10 +70,20 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("meta"):
-            st.caption(f"route: {msg['meta'].get('route')} | score: {msg['meta'].get('score'):.2f}")
+            m = msg["meta"]
+            st.caption(f"route: {m.get('route')} | score: {m.get('score', 0):.2f} | {m.get('latency', '')}")
 
-prefill = st.session_state.pop("prefill", "")
-user_input = st.chat_input("Напиши запрос...", key="chat_input") or prefill
+# Вставляем prefill в поле — НЕ отправляем автоматически
+prefill = st.session_state.get("prefill", "")
+if prefill:
+    edited = st.text_area("Редактируй и отправь:", value=prefill, height=80)
+    if st.button("Отправить", type="primary"):
+        st.session_state.pop("prefill", None)
+        user_input = edited
+    else:
+        user_input = None
+else:
+    user_input = st.chat_input(placeholder="Напиши запрос...", key="chat_input")
 
 if user_input:
     st.session_state.messages.append({"role": "user", "content": user_input})
@@ -79,22 +96,49 @@ if user_input:
                 resp = httpx.post(
                     f"{BACKEND}/chat",
                     json={"message": user_input, "session_id": session_id},
-                    timeout=120,
+                    timeout=180,
                 )
-                data = resp.json()
+                data   = resp.json()
                 answer = data.get("answer", "Ошибка")
                 score  = data.get("quality_score", 0)
                 route  = data.get("route", "?")
+                lat    = data.get("latency_seconds", 0)
+
+                # Очищаем артефакты — убираем если промпт попал в ответ
+                PROMPT_ARTIFACTS = [
+                    "Формат для каждой темы (срочное первым):",
+                    "Только план, без вступлений и итогов:",
+                    "Срочное первым. Только план:",
+                ]
+                for artifact in PROMPT_ARTIFACTS:
+                    if artifact in answer:
+                        answer = answer[:answer.index(artifact)].strip()
 
                 st.markdown(answer)
-                st.caption(f"route: {route} | quality: {score:.2f}")
+                st.caption(f"route: {route} | quality: {score:.2f} | {lat:.1f}s")
 
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": answer,
-                    "meta": {"route": route, "score": score},
+                    "meta": {"route": route, "score": score, "latency": f"{lat:.1f}s"},
                 })
             except httpx.TimeoutException:
-                st.error("Таймаут — модель думает слишком долго. Попробуй ещё раз.")
+    # Модель ответила но Streamlit не дождался — спрашиваем напрямую
+                try:
+                    resp2 = httpx.post(
+                        f"{BACKEND}/chat",
+                        json={"message": user_input, "session_id": session_id},
+                        timeout=300,  # даём 5 минут
+                    )
+                    data = resp2.json()
+                    answer = data.get("answer", "Нет ответа")
+                    st.markdown(answer)
+                    st.caption(f"route: {data.get('route')} | score: {data.get('quality_score', 0):.2f}")
+                    st.session_state.messages.append({
+                        "role":  "assistant", "content": answer,
+                        "meta": {"route": data.get("route"), "score": data.get("quality_score", 0), "latency": ""},
+                    })
+                except Exception:
+                    st.warning("Модель всё ещё думает. Подожди 30 секунд и обнови страницу.")
             except Exception as e:
                 st.error(f"Ошибка: {e}")

@@ -6,17 +6,17 @@ from typing import TypedDict, Literal, Optional
 
 # ── LLM конфиги ──────────────────────────────────────────────
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-KIMI_API_KEY    = os.getenv("KIMI_API_KEY", "")
+OLLAMA_API_KEY    = os.getenv("OLLAMA_API_KEY", "")
 
 LLM_CONFIG = {
     "supervisor": {"model": "qwen2.5:7b",  "base_url": OLLAMA_BASE_URL},
     "planner":    {"model": "qwen2.5:3b",  "base_url": OLLAMA_BASE_URL},
     "evaluator":  {"model": "qwen2.5:1.5b","base_url": OLLAMA_BASE_URL},
-    # Tutor использует Kimi K2.5 через OpenAI-совместимый API
+    # Tutor использует Kimi K2.5 через OLLAMA
     "tutor": {
-        "model": "kimi-k2.5:cloud",   # Kimi модель
+        "model": "kimi-k2.5:cloud",   # Cloud модель
         "base_url": OLLAMA_BASE_URL,
-        "api_key": KIMI_API_KEY,
+        "api_key": OLLAMA_API_KEY,
     },
 }
 

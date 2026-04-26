@@ -2,8 +2,10 @@
   "summary": {
     "passed": 5,
     "total": 5,
-    "avg_latency": 31.640000000000004,
-    "avg_score": 0.8400000000000001
+    "tcr": "100%",
+    "avg_latency_sec": 49.0,
+    "avg_quality_score": 0.96,
+    "latency_threshold": 120
   },
   "tests": [
     {
@@ -12,9 +14,9 @@
       "expected_route": "planner",
       "actual_route": "planner",
       "route_ok": true,
-      "keywords_hit": "67%",
-      "quality_score": 0.8,
-      "latency_sec": 49.5,
+      "keywords_hit": "100%",
+      "quality_score": 1.0,
+      "latency_sec": 67.0,
       "latency_ok": true,
       "status": "PASS"
     },
@@ -24,9 +26,9 @@
       "expected_route": "tutor",
       "actual_route": "tutor",
       "route_ok": true,
-      "keywords_hit": "100%",
-      "quality_score": 0.8,
-      "latency_sec": 27.7,
+      "keywords_hit": "80%",
+      "quality_score": 1.0,
+      "latency_sec": 31.9,
       "latency_ok": true,
       "status": "PASS"
     },
@@ -36,9 +38,9 @@
       "expected_route": "planner",
       "actual_route": "planner",
       "route_ok": true,
-      "keywords_hit": "50%",
+      "keywords_hit": "100%",
       "quality_score": 0.8,
-      "latency_sec": 30.2,
+      "latency_sec": 25.7,
       "latency_ok": true,
       "status": "PASS"
     },
@@ -48,9 +50,9 @@
       "expected_route": "both",
       "actual_route": "both",
       "route_ok": true,
-      "keywords_hit": "50%",
-      "quality_score": 0.8,
-      "latency_sec": 37.2,
+      "keywords_hit": "100%",
+      "quality_score": 1.0,
+      "latency_sec": 85.7,
       "latency_ok": true,
       "status": "PASS"
     },
@@ -60,9 +62,9 @@
       "expected_route": "tutor",
       "actual_route": "tutor",
       "route_ok": true,
-      "keywords_hit": "50%",
+      "keywords_hit": "75%",
       "quality_score": 1.0,
-      "latency_sec": 13.6,
+      "latency_sec": 34.8,
       "latency_ok": true,
       "status": "PASS"
     }
